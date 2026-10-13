@@ -1,0 +1,22 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "youarehere-nominatim-proxy",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-13",
+	// Required for non-interactive / scoped-API-token deploys — see README.md.
+	"account_id": "9451e8da8f805a84269e417bfbdf41da",
+
+	"vars": {
+		// Nominatim's usage policy asks for an identifying User-Agent (and/or
+		// Referer) so they can contact the operator — update the contact email.
+		"NOMINATIM_USER_AGENT": "youarehere-tile-demo/1.0 (+mjh2241@columbia.edu)",
+		"ALLOWED_ORIGIN": "*"
+	},
+
+	"durable_objects": {
+		"bindings": [{ "name": "NOMINATIM_GATE", "class_name": "NominatimGate" }]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["NominatimGate"] }],
+
+	"observability": { "enabled": true }
+}
