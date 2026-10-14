@@ -1,20 +1,75 @@
 <script>
+	import { onMount } from 'svelte';
 	import MapView from '#lib/MapView.svelte';
-	import { searchPlaces } from '#lib/nominatim.js';
+	import { searchPlaces, reverseGeocode } from '#lib/nominatim.js';
 	import { ancestorChain, chainToFeatureCollection, quadkey } from '#lib/tiles.js';
 
 	const MAX_ZOOM = 22;
-	const PMTILES_URL = 'https://latest.protomaps.com/v4.pmtiles';
+	const PMTILES_URL = 'https://prod.ciesin.app/tiles/protomaps/protomaps_base.pmtiles';
+	const DEFAULT_ADDRESS =
+		"Lamont-Doherty Earth Observatory, Ludlow Lane, Sneden's Landing, Palisades, Tappan, Town of Orangetown, Rockland County, New York, 10964, United States";
+	// used only if the default-address lookup above fails (e.g. offline)
+	const DEFAULT_FALLBACK = { lon: -73.9147, lat: 41.0186 };
 
 	let query = $state('');
 	let suggestions = $state([]);
 	let searching = $state(false);
 	/** @type {{ lon: number, lat: number, label: string } | null} */
 	let point = $state(null);
+	// mirrors `point`, but updates continuously while the pin is being dragged
+	// (before the drag-end reverse-geocode resolves) so the tile highlight
+	// tracks the pin in real time
+	/** @type {{ lon: number, lat: number } | null} */
+	let livePosition = $state(null);
 	let zoom = $state(2);
+	let reverseGeocoding = $state(false);
 
 	/** @type {AbortController | undefined} */
 	let inFlight;
+	/** @type {AbortController | undefined} */
+	let reverseInFlight;
+
+	/** @param {{ lon: number, lat: number, label: string }} place */
+	function commitPoint(place) {
+		point = place;
+		livePosition = { lon: place.lon, lat: place.lat };
+	}
+
+	onMount(async () => {
+		try {
+			const [result] = await searchPlaces(DEFAULT_ADDRESS, { limit: 1 });
+			if (result) {
+				commitPoint({ lon: Number(result.lon), lat: Number(result.lat), label: result.display_name });
+				query = result.display_name;
+				return;
+			}
+		} catch (err) {
+			console.error(err);
+		}
+		const label = 'Lamont-Doherty Earth Observatory';
+		commitPoint({ ...DEFAULT_FALLBACK, label });
+		query = label;
+	});
+
+	// Only reverse-geocode once the pin is dropped — not on every drag tick.
+	/** @param {{ lon: number, lat: number }} pos */
+	async function handleDragEnd(pos) {
+		reverseInFlight?.abort();
+		reverseInFlight = new AbortController();
+		reverseGeocoding = true;
+		try {
+			const result = await reverseGeocode(pos.lat, pos.lon, { signal: reverseInFlight.signal });
+			commitPoint({ ...pos, label: result.display_name });
+			query = result.display_name;
+		} catch (err) {
+			if (err.name !== 'AbortError') {
+				console.error(err);
+				commitPoint({ ...pos, label: `${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}` });
+			}
+		} finally {
+			reverseGeocoding = false;
+		}
+	}
 
 	// Nominatim's usage policy disallows search-as-you-type against the public
 	// API — only fire on an explicit submit, never per keystroke.
@@ -38,25 +93,44 @@
 	}
 
 	function selectPlace(result) {
-		point = { lon: Number(result.lon), lat: Number(result.lat), label: result.display_name };
+		commitPoint({ lon: Number(result.lon), lat: Number(result.lat), label: result.display_name });
 		query = result.display_name;
 		suggestions = [];
 		zoom = 2;
 	}
 
-	let chain = $derived(point ? ancestorChain(point.lon, point.lat, MAX_ZOOM) : []);
+	let chain = $derived.by(() => {
+		const pos = livePosition;
+		return pos ? ancestorChain(pos.lon, pos.lat, MAX_ZOOM) : [];
+	});
 	let highlightGeojson = $derived(chainToFeatureCollection(chain, zoom));
 	let currentTile = $derived(chain.find((t) => t.z === zoom));
 </script>
 
 <div class="app">
-	<MapView {point} {highlightGeojson} bind:zoom maxZoom={MAX_ZOOM} pmtilesUrl={PMTILES_URL} />
+	<MapView
+		{point}
+		{highlightGeojson}
+		bind:zoom
+		bind:livePosition
+		maxZoom={MAX_ZOOM}
+		pmtilesUrl={PMTILES_URL}
+		onDragEnd={handleDragEnd}
+	/>
 
 	<div class="panel search-panel">
 		<form onsubmit={onSearchSubmit}>
 			<input type="text" placeholder="Search a place…" bind:value={query} />
 			<button type="submit" disabled={searching}>{searching ? 'searching…' : 'Search'}</button>
 		</form>
+		{#if point}
+			<p class="pin-label">
+				{point.label}
+				{#if reverseGeocoding}
+					<span class="hint">· updating…</span>
+				{/if}
+			</p>
+		{/if}
 		{#if suggestions.length}
 			<ul class="suggestions">
 				{#each suggestions as result (result.place_id)}
@@ -82,7 +156,7 @@
 					)}
 				{/if}
 			</label>
-			<input id="zoom-slider" type="range" min="0" max={MAX_ZOOM} step="1" bind:value={zoom} />
+			<input id="zoom-slider" type="range" min="0" max={MAX_ZOOM} step="1" color="#1D4F91" bind:value={zoom} />
 
 			<table>
 				<thead>
@@ -157,8 +231,8 @@
 	.search-panel form button {
 		padding: 0.5rem 0.75rem;
 		font-size: 0.9rem;
-		border: 1px solid #2563eb;
-		background: #2563eb;
+		border: 1px solid #1D4F91;
+		background: #1D4F91;
 		color: white;
 		border-radius: 6px;
 		cursor: pointer;
@@ -170,14 +244,15 @@
 		cursor: default;
 	}
 
-	.attribution {
-		font-size: 0.7rem;
-		color: #888;
+	.pin-label {
+		font-size: 0.8rem;
 		margin: 0.5rem 0 0;
+		overflow-wrap: break-word;
 	}
 
-	.attribution a {
-		color: inherit;
+	.pin-label .hint {
+		color: #888;
+		font-style: italic;
 	}
 
 	.suggestions {

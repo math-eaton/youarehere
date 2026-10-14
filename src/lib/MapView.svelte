@@ -10,6 +10,8 @@
     zoom = $bindable(2),
     maxZoom = 14,
     pmtilesUrl,
+    livePosition = $bindable(null),
+    onDragEnd,
   } = $props();
 
   /** @type {HTMLDivElement} */
@@ -63,7 +65,7 @@
           },
           layers: layers("protomaps", namedFlavor("light")),
         },
-        center: [0, 20],
+        center: [2, 1],
         zoom,
         maxZoom,
       });
@@ -86,7 +88,7 @@
           type: "fill",
           source: "tile-chain",
           paint: {
-            "fill-color": ["case", ["get", "current"], "#ff5a1f", "#2563eb"],
+            "fill-color": ["case", ["get", "current"], "#ff5a1f", "#1D4F91"],
             "fill-opacity": ["case", ["get", "current"], 0.1, 0.02],
           },
         });
@@ -95,7 +97,7 @@
           type: "line",
           source: "tile-chain",
           paint: {
-            "line-color": ["case", ["get", "current"], "#ff5a1f", "#2563eb"],
+            "line-color": ["case", ["get", "current"], "#ff5a1f", "#1D4F91"],
             "line-width": ["case", ["get", "current"], 3, 1],
           },
         });
@@ -127,7 +129,7 @@
   });
 
   $effect(() => {
-    if (!mapReady) return;
+    if (!mapReady || !maplibregl || !map) return;
     // re-run when `point` or `zoom` changes
     void point;
     void zoom;
@@ -136,9 +138,18 @@
       if (marker) {
         marker.setLngLat([point.lon, point.lat]);
       } else {
-        marker = new maplibregl.Marker()
+        const m = new maplibregl.Marker({ draggable: true })
           .setLngLat([point.lon, point.lat])
           .addTo(map);
+        m.on("drag", () => {
+          const { lng, lat } = m.getLngLat();
+          livePosition = { lon: lng, lat };
+        });
+        m.on("dragend", () => {
+          const { lng, lat } = m.getLngLat();
+          onDragEnd?.({ lon: lng, lat });
+        });
+        marker = m;
       }
     }
 
