@@ -78,6 +78,9 @@
         "bottom-left",
       );
 
+      // map.showTileBoundaries = true;
+
+
       map.on("load", () => {
         map.addSource("tile-chain", {
           type: "geojson",
@@ -88,8 +91,8 @@
           type: "fill",
           source: "tile-chain",
           paint: {
-            "fill-color": ["case", ["get", "current"], "#ff5a1f", "#1D4F91"],
-            "fill-opacity": ["case", ["get", "current"], 0.1, 0.02],
+            "fill-color": ["case", ["get", "current"], "#000d74", "#6CADDF"],
+            "fill-opacity": ["case", ["get", "current"], 0.085, 0.04],
           },
         });
         map.addLayer({
@@ -97,8 +100,8 @@
           type: "line",
           source: "tile-chain",
           paint: {
-            "line-color": ["case", ["get", "current"], "#ff5a1f", "#1D4F91"],
-            "line-width": ["case", ["get", "current"], 3, 1],
+            "line-color": ["case", ["get", "current"], "#000d74", "#75AADB"],
+            "line-width": ["case", ["get", "current"], 2, 1],
           },
         });
         mapReady = true;
@@ -138,7 +141,7 @@
       if (marker) {
         marker.setLngLat([point.lon, point.lat]);
       } else {
-        const m = new maplibregl.Marker({ draggable: true })
+        const m = new maplibregl.Marker({ color: "#000d74", draggable: true })
           .setLngLat([point.lon, point.lat])
           .addTo(map);
         m.on("drag", () => {
@@ -157,7 +160,7 @@
     map.easeTo({
       center: point ? [point.lon, point.lat] : map.getCenter(),
       zoom,
-      duration: 500,
+      duration: 400,
     });
   });
 </script>
