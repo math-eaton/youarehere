@@ -14,8 +14,7 @@
   const DEFAULT_ADDRESS =
     "Lamont-Doherty Earth Observatory, Ludlow Lane, Sneden's Landing, Palisades, Tappan, Town of Orangetown, Rockland County, New York, 10964, United States";
   // used only if the default-address lookup above fails (e.g. offline)
-  const DEFAULT_FALLBACK = { lon: -73.9147, lat: 41.0186 };
-
+  const DEFAULT_FALLBACK = { lon: -73.90582853328229, lat: 41.00595224485467 };
   let query = $state("");
   let suggestions = $state([]);
   let searching = $state(false);
