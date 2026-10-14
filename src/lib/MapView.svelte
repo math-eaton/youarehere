@@ -32,16 +32,22 @@
     let cancelled = false;
 
     (async () => {
-      const [maplibreModule, pmtilesModule, basemapsModule] = await Promise.all(
-        [
+      const [maplibreModule, workerUrlModule, pmtilesModule, basemapsModule] =
+        await Promise.all([
           import("maplibre-gl"),
+          // maplibre-gl locates its background worker via a sibling file at
+          // runtime (import.meta.url); that breaks once a bundler merges
+          // maplibre-gl.mjs into a shared chunk (production builds). Import
+          // the worker as a proper Vite asset instead and point maplibre at
+          // it explicitly below.
+          import("maplibre-gl/dist/maplibre-gl-worker.mjs?url"),
           import("pmtiles"),
           import("@protomaps/basemaps"),
-        ],
-      );
+        ]);
       if (cancelled) return;
 
       maplibregl = maplibreModule;
+      maplibregl.setWorkerUrl(workerUrlModule.default);
       protocol = new pmtilesModule.Protocol();
       maplibregl.addProtocol("pmtiles", protocol.tile);
 
