@@ -27,6 +27,40 @@
   let livePosition = $state(null);
   let zoom = $state(2);
   let reverseGeocoding = $state(false);
+  // live camera zoom, continuous — see MapView's `viewportZoom` bindable
+  let viewportZoom = $state(2);
+
+  // Caps the basemap's own tile-fetch zoom below the viewport zoom, so the
+  // coarser tile renders overzoomed (stretched) instead of the native finer
+  // one — illustrates how much detail a given zoom level actually carries.
+  // null = uncapped/native (MapView applies no override at all).
+  /** @type {number | null} */
+  let dataMaxZoom = $state(null);
+  /** @type {number | null} */
+  let nativeDataMinZoom = $state(null);
+  /** @type {number | null} */
+  let nativeDataMaxZoom = $state(null);
+  // last value the user explicitly dragged to, pre-ceiling-clamp; null means
+  // "no explicit choice yet — follow the live ceiling" (see sliderValue below)
+  /** @type {number | null} */
+  let dataMaxZoomDisplay = $state(null);
+
+  // You can't overzoom data to a finer level than the viewport is actually
+  // showing — e.g. requesting z15 data while the camera sits at z0 has no
+  // visible effect. So the cap control's own ceiling tracks the live
+  // viewport zoom, not the archive's native max.
+  let dataZoomCeiling = $derived(
+    nativeDataMaxZoom == null
+      ? null
+      : Math.min(nativeDataMaxZoom, Math.floor(viewportZoom)),
+  );
+  let sliderValue = $derived(
+    dataZoomCeiling == null
+      ? 0
+      : dataMaxZoomDisplay == null
+        ? dataZoomCeiling
+        : Math.min(dataMaxZoomDisplay, dataZoomCeiling),
+  );
 
   /** @type {AbortController | undefined} */
   let inFlight;
@@ -130,6 +164,10 @@
     {highlightGeojson}
     bind:zoom
     bind:livePosition
+    bind:dataMaxZoom
+    bind:nativeDataMinZoom
+    bind:nativeDataMaxZoom
+    bind:viewportZoom
     maxZoom={MAX_ZOOM}
     pmtilesUrl={PMTILES_URL}
     onDragEnd={handleDragEnd}
@@ -166,7 +204,7 @@
   {#if point}
     <div class="panel chain-panel">
       <label class="zoom-label" for="zoom-slider">
-        zoom {zoom} of {MAX_ZOOM}
+        pinned zoom {zoom} of {MAX_ZOOM}
         {#if currentTile}
         | tile {currentTile.z}/{currentTile.x}/{currentTile.y} | quadkey {quadkey(
             currentTile.x,
@@ -184,6 +222,41 @@
         color="#1D4F91"
         bind:value={zoom}
       />
+
+      {#if dataZoomCeiling != null}
+        <label class="zoom-label data-zoom-label" for="data-zoom-slider">
+          draw tile zoom: z{sliderValue}{dataMaxZoom == null ? " (default)" : ""}
+          {#if dataMaxZoom != null && dataMaxZoom < Math.floor(viewportZoom)}
+            <span class="hint"
+              >| z{dataMaxZoom} map data viewed at z{Math.floor(viewportZoom)}</span
+            >
+          {/if}
+        </label>
+        <div class="data-zoom-row">
+          <input
+            id="data-zoom-slider"
+            type="range"
+            min={nativeDataMinZoom}
+            max={dataZoomCeiling}
+            step="1"
+            value={sliderValue}
+            oninput={(e) => (dataMaxZoomDisplay = Number(e.currentTarget.value))}
+            onchange={() =>
+              (dataMaxZoom = sliderValue >= dataZoomCeiling ? null : sliderValue)}
+          />
+          <button
+            type="button"
+            class="reset-button"
+            disabled={dataMaxZoom == null}
+            onclick={() => {
+              dataMaxZoomDisplay = null;
+              dataMaxZoom = null;
+            }}
+          >
+            reset
+          </button>
+        </div>
+      {/if}
 
       <table>
         <thead>
@@ -207,6 +280,8 @@
       </table>
     </div>
   {/if}
+
+  <div class="panel zoom-tooltip">current zoom {viewportZoom.toFixed(1)}</div>
 </div>
 
 <style>
@@ -271,7 +346,7 @@
     overflow-wrap: break-word;
   }
 
-  .pin-label .hint {
+  .hint {
     color: #888;
     font-style: italic;
   }
@@ -300,6 +375,15 @@
     background: #eef2ff;
   }
 
+  .zoom-tooltip {
+    bottom: 1rem;
+    /* clear maplibre's own bottom-left compass/zoom control */
+    left: 3.5rem;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    padding: 0.35rem 0.6rem;
+  }
+
   .chain-panel {
     top: 1rem;
     right: 1rem;
@@ -315,6 +399,35 @@
   .chain-panel input[type="range"] {
     width: 100%;
     accent-color: #1d4f91;
+  }
+
+  .data-zoom-label {
+    margin-top: 0.6rem;
+  }
+
+  .data-zoom-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .data-zoom-row input[type="range"] {
+    flex: 1;
+  }
+
+  .reset-button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border: 1px solid #1d4f91;
+    background: white;
+    color: #1d4f91;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .reset-button:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   table {

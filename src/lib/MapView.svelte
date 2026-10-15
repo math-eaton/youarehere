@@ -8,10 +8,22 @@
     point = null,
     highlightGeojson,
     zoom = $bindable(2),
-    maxZoom = 14,
+    maxZoom = 15,
     pmtilesUrl,
     livePosition = $bindable(null),
     onDragEnd,
+    // Caps the basemap source's own tile-fetch zoom below the viewport zoom,
+    // so maplibre's built-in overzoom (stretch the coarser tile to fill the
+    // finer viewport) kicks in deliberately — illustrates resolution loss.
+    // null = uncapped/native. nativeDataMinZoom/MaxZoom are read-only, set
+    // once the pmtiles archive's own header is known.
+    dataMaxZoom = $bindable(null),
+    nativeDataMinZoom = $bindable(null),
+    nativeDataMaxZoom = $bindable(null),
+    // Live, continuous camera zoom — read-only from the parent's side,
+    // purely informational (zoom readout, data-cap ceiling). Never fed back
+    // into a camera command, so scroll/pinch-zoom stays natural and smooth.
+    viewportZoom = $bindable(0),
   } = $props();
 
   /** @type {HTMLDivElement} */
@@ -23,7 +35,13 @@
   /** @type {import('maplibre-gl').Marker | undefined} */
   let marker;
   let mapReady = $state(false);
-  let programmaticMove = false;
+  const BASEMAP_SOURCE_ID = "protomaps";
+  // base source config (sans maxzoom) + generated layer specs, kept around
+  // so the data-cap effect can remove/re-add the source with a new maxzoom
+  /** @type {{ type: 'vector', url: string, attribution: string }} */
+  let basemapSourceBase;
+  /** @type {import('maplibre-gl').LayerSpecification[]} */
+  let basemapLayerSpecs;
 
   const emptyFC = { type: "FeatureCollection", features: [] };
 
@@ -53,6 +71,14 @@
 
       const { layers, namedFlavor } = basemapsModule;
 
+      basemapSourceBase = {
+        type: "vector",
+        url: `pmtiles://${pmtilesUrl}`,
+        attribution:
+          '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a> contributors, <a href="https://protomaps.com">© Protomaps</a>',
+      };
+      basemapLayerSpecs = layers("protomaps", namedFlavor("light"));
+
       map = new maplibregl.Map({
         container,
         style: {
@@ -62,14 +88,9 @@
           sprite:
             "https://protomaps.github.io/basemaps-assets/sprites/v4/light",
           sources: {
-            protomaps: {
-              type: "vector",
-              url: `pmtiles://${pmtilesUrl}`,
-              attribution:
-                '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a> contributors, <a href="https://protomaps.com">© Protomaps</a>',
-            },
+            [BASEMAP_SOURCE_ID]: basemapSourceBase,
           },
-          layers: layers("protomaps", namedFlavor("light")),
+          layers: basemapLayerSpecs,
         },
         center: [2, 1],
         zoom,
@@ -78,14 +99,18 @@
 
       map.addControl(
         new maplibregl.NavigationControl({
-          showZoom: false, 
+          showZoom: true,
           showCompass: true,
         }),
         "bottom-left",
       );
 
-      // map.showTileBoundaries = true;
-
+      // Continuous, read-only — no easing/snapping, so scroll/pinch-zoom
+      // stays fully native. Feeds the zoom readout and the data-cap ceiling.
+      viewportZoom = zoom;
+      map.on("zoom", () => {
+        viewportZoom = map.getZoom();
+      });
 
       map.on("load", () => {
         map.addSource("tile-chain", {
@@ -97,8 +122,8 @@
           type: "fill",
           source: "tile-chain",
           paint: {
-            "fill-color": ["case", ["get", "current"], "#000d74", "#6CADDF"],
-            "fill-opacity": ["case", ["get", "current"], 0.085, 0.04],
+            "fill-color": ["case", ["get", "current"], "#FF7F41", "#6CADDF"],
+            "fill-opacity": ["case", ["get", "current"], 0.1, 0.0],
           },
         });
         map.addLayer({
@@ -106,19 +131,19 @@
           type: "line",
           source: "tile-chain",
           paint: {
-            "line-color": ["case", ["get", "current"], "#000d74", "#75AADB"],
-            "line-width": ["case", ["get", "current"], 2, 1],
+            "line-color": ["case", ["get", "current"], "#000d74", "#FF7F41"],
+            "line-width": ["case", ["get", "current"], 3, 1.5],
           },
         });
-        mapReady = true;
-      });
 
-      map.on("zoomend", () => {
-        if (programmaticMove) {
-          programmaticMove = false;
-          return;
-        }
-        zoom = Math.round(map.getZoom());
+        // pmtiles resolves the archive's real min/maxzoom from its header
+        // once the source loads — surface it so the parent can size a
+        // "cap the data zoom" slider against the archive's actual range.
+        const basemapSource = map.getSource(BASEMAP_SOURCE_ID);
+        nativeDataMinZoom = basemapSource?.minzoom ?? 0;
+        nativeDataMaxZoom = basemapSource?.maxzoom ?? maxZoom;
+
+        mapReady = true;
       });
     })();
 
@@ -162,12 +187,32 @@
       }
     }
 
-    programmaticMove = true;
     map.easeTo({
       center: point ? [point.lon, point.lat] : map.getCenter(),
       zoom,
       duration: 400,
     });
+  });
+
+  // maplibre has no setMaxzoom() — changing a vector source's fetch-zoom
+  // ceiling means removing + re-adding the source (and every layer that
+  // references it). Tiles above dataMaxZoom are then served from the
+  // dataMaxZoom tile, overzoomed (maplibre's built-in behavior) to fill
+  // the viewport, rather than fetching the native finer tile.
+  $effect(() => {
+    if (!mapReady || !map || dataMaxZoom == null) return;
+    const source = map.getSource(BASEMAP_SOURCE_ID);
+    if (!source || source.maxzoom === dataMaxZoom) return;
+
+    for (const spec of basemapLayerSpecs) {
+      if (map.getLayer(spec.id)) map.removeLayer(spec.id);
+    }
+    map.removeSource(BASEMAP_SOURCE_ID);
+    map.addSource(BASEMAP_SOURCE_ID, { ...basemapSourceBase, maxzoom: dataMaxZoom });
+    const beforeId = map.getLayer("tile-chain-fill") ? "tile-chain-fill" : undefined;
+    for (const spec of basemapLayerSpecs) {
+      map.addLayer(spec, beforeId);
+    }
   });
 </script>
 
