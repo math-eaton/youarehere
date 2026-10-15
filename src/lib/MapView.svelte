@@ -129,7 +129,7 @@
           source: "tile-chain",
           paint: {
             "fill-color": ["case", ["get", "current"], "#FF7F41", "#6CADDF"],
-            "fill-opacity": ["case", ["get", "current"], 0.1, 0.0],
+            "fill-opacity": ["case", ["get", "current"], 0.125, 0.0],
           },
         });
         map.addLayer({
@@ -138,7 +138,31 @@
           source: "tile-chain",
           paint: {
             "line-color": ["case", ["get", "current"], "#000d74", "#FF7F41"],
-            "line-width": ["case", ["get", "current"], 3, 1.5],
+            "line-width": ["case", ["get", "current"], 2, 1.5],
+          },
+        });
+        // "zN" reference label at each parent tile's NW corner..the
+        // current tile is deliberately unlabeled (see chainToFeatureCollection).
+        map.addLayer({
+          id: "tile-chain-label",
+          type: "symbol",
+          source: "tile-chain",
+          filter: ["has", "label"],
+          layout: {
+            "text-field": ["get", "label"],
+            "text-font": ["Courier New Bold", "Arial Unicode MS Bold"],
+            "text-size": 12,
+            "text-padding": 12,
+            "text-anchor": "top-left",
+            "text-offset": [0.5, 0.5],
+            "text-justify": "auto",
+            "text-allow-overlap": false,
+            "text-ignore-placement": false,
+          },
+          paint: {
+            "text-color": "#FF7F41",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 0.85,
           },
         });
 

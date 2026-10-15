@@ -1,4 +1,4 @@
-// Slippy-map (XYZ) tile math — see https://www.analyze.earth/posts/web-mercator-tiles/
+// Slippy-map (XYZ) tile math .. see https://www.analyze.earth/posts/web-mercator-tiles/
 // Each zoom level recursively quarters the previous one: tile (x, y) at zoom z
 // contains tiles (2x..2x+1, 2y..2y+1) at zoom z+1.
 
@@ -52,7 +52,7 @@ export function quadkey(x, y, z) {
 }
 
 /**
- * The full z0..maxZoom ancestor chain of tiles containing a point — the
+ * The full z0..maxZoom ancestor chain of tiles containing a point .. the
  * recursive "which quadrant, then which quadrant of that quadrant" path
  * the blog post walks through.
  * @returns {{ z: number, x: number, y: number }[]}
@@ -67,18 +67,31 @@ export function ancestorChain(lon, lat, maxZoom) {
 
 /**
  * The chain's tiles from z0 up to `currentZoom`, as a GeoJSON FeatureCollection
- * of nested polygons — the tile at `currentZoom` is flagged `current` so the
- * map style can draw it emphasized.
+ * of nested polygons .. the tile at `currentZoom` is flagged `current` so the
+ * map style can draw it emphasized. Each non-current ("parent") tile also
+ * gets a companion Point feature at its NW corner, tagged `label`, for a
+ * "zN" reference label .. the current tile is skipped since the active zoom
+ * is already shown elsewhere in the UI.
  */
 export function chainToFeatureCollection(chain, currentZoom) {
-	return {
-		type: 'FeatureCollection',
-		features: chain
-			.filter((tile) => tile.z <= currentZoom)
-			.map((tile) => ({
+	const ancestry = chain.filter((tile) => tile.z <= currentZoom);
+
+	const polygons = ancestry.map((tile) => ({
+		type: 'Feature',
+		properties: { z: tile.z, x: tile.x, y: tile.y, current: tile.z === currentZoom },
+		geometry: { type: 'Polygon', coordinates: [tilePolygonRing(tile.x, tile.y, tile.z)] }
+	}));
+
+	const labels = ancestry
+		.filter((tile) => tile.z !== currentZoom)
+		.map((tile) => {
+			const [lonMin, , , latMax] = tileBounds(tile.x, tile.y, tile.z);
+			return {
 				type: 'Feature',
-				properties: { z: tile.z, x: tile.x, y: tile.y, current: tile.z === currentZoom },
-				geometry: { type: 'Polygon', coordinates: [tilePolygonRing(tile.x, tile.y, tile.z)] }
-			}))
-	};
+				properties: { z: tile.z, label: `Z${tile.z}` },
+				geometry: { type: 'Point', coordinates: [lonMin, latMax] }
+			};
+		});
+
+	return { type: 'FeatureCollection', features: [...polygons, ...labels] };
 }
