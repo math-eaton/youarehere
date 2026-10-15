@@ -97,6 +97,12 @@
         maxZoom,
       });
 
+      let scale = new maplibregl.ScaleControl({
+        maxWidth: 100,
+        unit: "metric",
+      });
+      map.addControl(scale), "bottom-left";
+
       map.addControl(
         new maplibregl.NavigationControl({
           showZoom: true,
@@ -208,8 +214,13 @@
       if (map.getLayer(spec.id)) map.removeLayer(spec.id);
     }
     map.removeSource(BASEMAP_SOURCE_ID);
-    map.addSource(BASEMAP_SOURCE_ID, { ...basemapSourceBase, maxzoom: dataMaxZoom });
-    const beforeId = map.getLayer("tile-chain-fill") ? "tile-chain-fill" : undefined;
+    map.addSource(BASEMAP_SOURCE_ID, {
+      ...basemapSourceBase,
+      maxzoom: dataMaxZoom,
+    });
+    const beforeId = map.getLayer("tile-chain-fill")
+      ? "tile-chain-fill"
+      : undefined;
     for (const spec of basemapLayerSpecs) {
       map.addLayer(spec, beforeId);
     }

@@ -376,12 +376,15 @@
   }
 
   .zoom-tooltip {
-    bottom: 1rem;
+    bottom: 0;
+    margin-bottom: 10px;
+    margin-left: 10px;
+    position: absolute;
     /* clear maplibre's own bottom-left compass/zoom control */
-    left: 3.5rem;
-    font-size: 0.8rem;
+    left: 120px;
+    font-size: 0.7rem;
     font-variant-numeric: tabular-nums;
-    padding: 0.35rem 0.6rem;
+    padding: 0.35rem 0.5rem;
   }
 
   .chain-panel {
