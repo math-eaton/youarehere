@@ -1,6 +1,6 @@
 <script>
   import "maplibre-gl/dist/maplibre-gl.css";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
 
   /** @typedef {{ lon: number, lat: number, label: string }} Point */
 
@@ -142,6 +142,8 @@
           },
         });
 
+        // map.showTileBoundaries = true;
+
         // pmtiles resolves the archive's real min/maxzoom from its header
         // once the source loads — surface it so the parent can size a
         // "cap the data zoom" slider against the archive's actual range.
@@ -168,36 +170,53 @@
     map.getSource("tile-chain")?.setData(highlightGeojson ?? emptyFC);
   });
 
+  // Marker sync + fly-to-new-place. Re-centers the camera only when `point`
+  // is an actually different location (a search pick, the initial
+  // bootstrap) — not when it's just a drag-end relabel at the same coords
+  // the marker is already sitting at. Otherwise every reverse-geocode
+  // resolving after a drag would yank the camera back to the chain-panel's
+  // zoom, hijacking whatever scroll-zoom level you were looking at.
   $effect(() => {
-    if (!mapReady || !maplibregl || !map) return;
-    // re-run when `point` or `zoom` changes
-    void point;
-    void zoom;
+    if (!mapReady || !maplibregl || !map || !point) return;
 
-    if (point) {
-      if (marker) {
-        marker.setLngLat([point.lon, point.lat]);
-      } else {
-        const m = new maplibregl.Marker({ color: "#000d74", draggable: true })
-          .setLngLat([point.lon, point.lat])
-          .addTo(map);
-        m.on("drag", () => {
-          const { lng, lat } = m.getLngLat();
-          livePosition = { lon: lng, lat };
-        });
-        m.on("dragend", () => {
-          const { lng, lat } = m.getLngLat();
-          onDragEnd?.({ lon: lng, lat });
-        });
-        marker = m;
-      }
+    const current = marker?.getLngLat();
+    const isNewPlace =
+      !current ||
+      Math.abs(current.lng - point.lon) > 1e-9 ||
+      Math.abs(current.lat - point.lat) > 1e-9;
+
+    if (marker) {
+      marker.setLngLat([point.lon, point.lat]);
+    } else {
+      const m = new maplibregl.Marker({ color: "#000d74", draggable: true })
+        .setLngLat([point.lon, point.lat])
+        .addTo(map);
+      m.on("drag", () => {
+        const { lng, lat } = m.getLngLat();
+        livePosition = { lon: lng, lat };
+      });
+      m.on("dragend", () => {
+        const { lng, lat } = m.getLngLat();
+        onDragEnd?.({ lon: lng, lat });
+      });
+      marker = m;
     }
 
-    map.easeTo({
-      center: point ? [point.lon, point.lat] : map.getCenter(),
-      zoom,
-      duration: 400,
-    });
+    if (isNewPlace) {
+      map.easeTo({ center: [point.lon, point.lat], zoom, duration: 400 });
+    }
+  });
+
+  // Chain-panel slider / table-row click → camera: zoom back to the pin at
+  // the chosen level. Reads `point` untracked so this effect depends only
+  // on `zoom` — dragging the pin (which changes `point`, not `zoom`) never
+  // triggers it, and scroll-zoom (which touches neither) is left alone.
+  $effect(() => {
+    if (!mapReady || !map) return;
+    void zoom;
+    /** @type {[number, number] | undefined} */
+    const center = untrack(() => (point ? [point.lon, point.lat] : undefined));
+    map.easeTo({ ...(center ? { center } : {}), zoom, duration: 400 });
   });
 
   // maplibre has no setMaxzoom() — changing a vector source's fetch-zoom
