@@ -112,7 +112,7 @@
           source: "tile-chain",
           paint: {
             "fill-color": ["case", ["get", "current"], "#FF7F41", "#6CADDF"],
-            "fill-opacity": ["case", ["get", "current"], 0.1, 0.0],
+            "fill-opacity": ["case", ["get", "current"], 0.0, 0.0],
           },
         });
         map.addLayer({
