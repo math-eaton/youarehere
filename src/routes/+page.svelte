@@ -9,8 +9,6 @@
   } from "#lib/tiles.js";
 
   const MAX_ZOOM = 22;
-  const PMTILES_URL =
-    "https://prod.ciesin.app/tiles/protomaps/protomaps_base.pmtiles";
   const DEFAULT_ADDRESS =
     "Lamont-Doherty Earth Observatory, Ludlow Lane, Sneden's Landing, Palisades, Tappan, Town of Orangetown, Rockland County, New York, 10964, United States";
   // used only if the default-address lookup above fails (e.g. offline)
@@ -169,7 +167,6 @@
     bind:nativeDataMaxZoom
     bind:viewportZoom
     maxZoom={MAX_ZOOM}
-    pmtilesUrl={PMTILES_URL}
     onDragEnd={handleDragEnd}
   />
 

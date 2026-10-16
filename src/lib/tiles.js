@@ -83,7 +83,7 @@ export function chainToFeatureCollection(chain, currentZoom) {
 	}));
 
 	const labels = ancestry
-		.filter((tile) => tile.z !== currentZoom)
+		// .filter((tile) => tile.z !== currentZoom)
 		.map((tile) => {
 			const [lonMin, , , latMax] = tileBounds(tile.x, tile.y, tile.z);
 			return {
