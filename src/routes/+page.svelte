@@ -157,45 +157,49 @@
 </script>
 
 <div class="app">
-  <MapView
-    {point}
-    {highlightGeojson}
-    bind:zoom
-    bind:livePosition
-    bind:dataMaxZoom
-    bind:nativeDataMinZoom
-    bind:nativeDataMaxZoom
-    bind:viewportZoom
-    maxZoom={MAX_ZOOM}
-    onDragEnd={handleDragEnd}
-  />
+  <div class="map-area">
+    <MapView
+      {point}
+      {highlightGeojson}
+      bind:zoom
+      bind:livePosition
+      bind:dataMaxZoom
+      bind:nativeDataMinZoom
+      bind:nativeDataMaxZoom
+      bind:viewportZoom
+      maxZoom={MAX_ZOOM}
+      onDragEnd={handleDragEnd}
+    />
 
-  <div class="panel search-panel">
-    <form onsubmit={onSearchSubmit}>
-      <input type="text" placeholder="Search a place…" bind:value={query} />
-      <button type="submit" disabled={searching}
-        >{searching ? "searching…" : "Search"}</button
-      >
-    </form>
-    {#if point}
-      <p class="pin-label">
-        {point.label}
-        {#if reverseGeocoding}
-          <span class="hint">· updating…</span>
-        {/if}
-      </p>
-    {/if}
-    {#if suggestions.length}
-      <ul class="suggestions">
-        {#each suggestions as result (result.place_id)}
-          <li>
-            <button type="button" onclick={() => selectPlace(result)}>
-              {result.display_name}
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    <div class="panel search-panel">
+      <form onsubmit={onSearchSubmit}>
+        <input type="text" placeholder="Search a place…" bind:value={query} />
+        <button type="submit" disabled={searching}
+          >{searching ? "searching…" : "Search"}</button
+        >
+      </form>
+      {#if point}
+        <p class="pin-label">
+          {point.label}
+          {#if reverseGeocoding}
+            <span class="hint">· updating…</span>
+          {/if}
+        </p>
+      {/if}
+      {#if suggestions.length}
+        <ul class="suggestions">
+          {#each suggestions as result (result.place_id)}
+            <li>
+              <button type="button" onclick={() => selectPlace(result)}>
+                {result.display_name}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+
+    <div class="panel zoom-tooltip">current zoom {viewportZoom.toFixed(1)}</div>
   </div>
 
   {#if point}
@@ -277,8 +281,6 @@
       </table>
     </div>
   {/if}
-
-  <div class="panel zoom-tooltip">current zoom {viewportZoom.toFixed(1)}</div>
 </div>
 
 <style>
@@ -288,10 +290,17 @@
   }
 
   .app {
-    position: relative;
+    display: flex;
+    flex-direction: column;
     width: 100vw;
     height: 100vh;
     font-family: Helvetica, Arial, sans-serif;
+  }
+
+  .map-area {
+    position: relative;
+    flex: 1;
+    min-height: 0;
   }
 
   .panel {
@@ -454,5 +463,24 @@
   tbody tr.current {
     background: #C4D8E2;
     font-weight: 600;
+  }
+
+  /* Narrow viewports: the chain-panel's table+sliders no longer fit as a
+     floating overlay without covering the map, so it drops into normal
+     flow as a footer (1/3 height) and the map keeps the remaining 2/3. */
+  @media (max-width: 760px) {
+    .map-area {
+      flex: 2;
+    }
+
+    .chain-panel {
+      position: static;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      max-width: none;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
   }
 </style>
