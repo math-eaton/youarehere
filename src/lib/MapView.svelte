@@ -35,9 +35,10 @@
   let marker;
   let mapReady = $state(false);
   const BASEMAP_SOURCE_ID = "protomaps";
-  // base source config (sans maxzoom) + generated layer specs, kept around
-  // so the data-cap effect can remove/re-add the source with a new maxzoom
-  /** @type {{ type: 'vector', url: string, attribution: string }} */
+  // base source config (incl. native maxzoom) + its layer specs, kept
+  // around so the data-cap effect can remove/re-add the source with a
+  // different maxzoom (or fall back to this native one when uncapped).
+  /** @type {{ type: string, tiles: string[], attribution: string, maxzoom?: number, minzoom?: number }} */
   let basemapSourceBase;
   /** @type {import('maplibre-gl').LayerSpecification[]} */
   let basemapLayerSpecs;
@@ -232,10 +233,15 @@
   // references it). Tiles above dataMaxZoom are then served from the
   // dataMaxZoom tile, overzoomed (maplibre's built-in behavior) to fill
   // the viewport, rather than fetching the native finer tile.
+  // dataMaxZoom == null means "uncapped" — that still has to be committed
+  // back to the source (falling back to its native maxzoom), not skipped,
+  // or a prior cap is stuck forever and the slider can never reset to native.
   $effect(() => {
-    if (!mapReady || !map || dataMaxZoom == null) return;
+    if (!mapReady || !map) return;
     const source = map.getSource(BASEMAP_SOURCE_ID);
-    if (!source || source.maxzoom === dataMaxZoom) return;
+    if (!source) return;
+    const targetMaxzoom = dataMaxZoom ?? basemapSourceBase.maxzoom;
+    if (source.maxzoom === targetMaxzoom) return;
 
     for (const spec of basemapLayerSpecs) {
       if (map.getLayer(spec.id)) map.removeLayer(spec.id);
@@ -243,7 +249,8 @@
     map.removeSource(BASEMAP_SOURCE_ID);
     map.addSource(BASEMAP_SOURCE_ID, {
       ...basemapSourceBase,
-      maxzoom: dataMaxZoom,
+      type: "vector",
+      maxzoom: targetMaxzoom,
     });
     const beforeId = map.getLayer("tile-chain-fill")
       ? "tile-chain-fill"
